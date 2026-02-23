@@ -1,0 +1,13 @@
+{
+  "name": "shopai",
+  "version": "1.0.0",
+  "description": "ShopAI – AI-powered prijsvergelijker met affiliate links",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build needed for API-only project'"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
