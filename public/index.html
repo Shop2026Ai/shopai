@@ -1,8 +1,757 @@
 <!DOCTYPE html>
-<html>
-<head><title>ShopAI API</title></head>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopAI – Slimmer Shoppen</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
 <body>
-<h1>ShopAI API draait ✅</h1>
-<p>Gebruik /api/claude om de AI aan te roepen.</p>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+
+
+// ── Affiliate DB ─────────────────────────────────────────────────────────────
+const affiliateDB = {
+  "bol.com":       { base: "https://partner.bol.com/click",  id: "SHOPAI-BOL-001", commission: "7%" },
+  "amazon.nl":     { base: "https://www.amazon.nl/ref=shopai", id: "shopai-21",    commission: "5%" },
+  "coolblue.nl":   { base: "https://www.coolblue.nl/aff",    id: "SHOPAI-CB-001",  commission: "4%" },
+  "mediamarkt.nl": { base: "https://www.mediamarkt.nl/aff",  id: "SHOPAI-MM-001",  commission: "3%" },
+  "nedgame.nl":    { base: "https://www.nedgame.nl/aff",     id: "SHOPAI-NG-001",  commission: "6%" },
+  "alternate.nl":  { base: "https://www.alternate.nl/aff",   id: "SHOPAI-AL-001",  commission: "4%" },
+  "wehkamp.nl":    { base: "https://www.wehkamp.nl/aff",     id: "SHOPAI-WH-001",  commission: "5%" },
+  "zalando.nl":    { base: "https://www.zalando.nl/aff",     id: "SHOPAI-ZL-001",  commission: "8%" },
+};
+
+function generateAffiliateLink(shop, slug) {
+  const aff = affiliateDB[shop];
+  if (!aff) {
+    const id = `SHOPAI-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    affiliateDB[shop] = { base: `https://${shop}/aff`, id, commission: "3%" };
+    return `https://${shop}/aff?tag=${id}&q=${slug}`;
+  }
+  return `${aff.base}?tag=${aff.id}&q=${slug}&src=shopai`;
+}
+
+// ── Images ───────────────────────────────────────────────────────────────────
+const CAT_IMGS = {
+  audio:    "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&q=80",
+  laptop:   "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&q=80",
+  telefoon: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80",
+  camera:   "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400&q=80",
+  tablet:   "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400&q=80",
+  gaming:   "https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=400&q=80",
+  horloge:  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80",
+  kleding:  "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&q=80",
+  schoenen: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80",
+  keuken:   "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&q=80",
+  fitness:  "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&q=80",
+  default:  "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=400&q=80",
+};
+
+function getImg(name, cat) {
+  const t = `${name} ${cat}`.toLowerCase();
+  for (const [k, u] of Object.entries(CAT_IMGS)) if (t.includes(k)) return u;
+  return CAT_IMGS.default;
+}
+
+// ── Anthropic API ─────────────────────────────────────────────────────────────
+const VERCEL_API = "https://shopai-id6u.vercel.app/api/claude";
+
+async function callClaude(prompt, max = 1000) {
+  const res = await fetch(VERCEL_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, max_tokens: max }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const d = await res.json();
+  const raw = (d.content || []).map(b => b.text || "").join("");
+  const clean = raw.replace(/```json|```/g, "").trim();
+  const s = clean.indexOf("["), e = clean.lastIndexOf("]");
+  return JSON.parse(s !== -1 ? clean.slice(s, e + 1) : clean);
+}
+
+async function fetchProducts(query) {
+  const data = await callClaude(
+    `Je bent een Nederlandse shopping-assistent voor ShopAI.
+Gebruiker zoekt: "${query}"
+Geef exact 5 productaanbevelingen als JSON array. Geen Temu, AliExpress of Alibaba.
+Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "description"(1 zin waarom goed).
+Alleen de JSON array, direct beginnen met [`
+  );
+  return data.map(p => ({ ...p, image: getImg(p.name, p.imageCategory || p.category) }));
+}
+
+async function fetchOffers(product) {
+  return callClaude(
+    `Je bent een Nederlandse shopping-assistent voor ShopAI.
+Genereer aanbiedingen voor: "${product.name}" (${product.category})
+Geef exact 5 webshops als JSON array. Geen Temu, AliExpress of Alibaba.
+Kies uit: bol.com, coolblue.nl, amazon.nl, mediamarkt.nl, alternate.nl, wehkamp.nl, zalando.nl, nedgame.nl.
+Elk object: "shop"(domein), "price"(geheel getal in euro), "rating"(4.0-5.0), "delivery"(levertijd tekst), "badge"(korte tekst of null), "reason"(1 zin waarom kopen).
+Realistische én variërende prijzen voor "${product.name}". Sorteer laag→hoog. Alleen JSON array, direct met [`,
+    800
+  );
+}
+
+// ── CSS ───────────────────────────────────────────────────────────────────────
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --c: #00ffe7; --c2: #ff2d6e; --c3: #ffe600;
+  --bg: #020812; --bg2: #050d1a; --bg3: #0a1628;
+  --text: #e0f4ff; --muted: rgba(0,255,231,0.35);
+  --glow: 0 0 20px rgba(0,255,231,0.4);
+  --glow2: 0 0 30px rgba(255,45,110,0.5);
+}
+
+body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; overflow-x: hidden; }
+
+/* scanlines */
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+}
+
+/* animated grid */
+.hud-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(rgba(0,255,231,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,231,0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  animation: bgDrift 25s linear infinite;
+}
+@keyframes bgDrift { from { background-position: 0 0; } to { background-position: 44px 44px; } }
+
+.hud-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+
+/* ═══ PANIC ═══ */
+.panic {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.panic-flash { position: absolute; inset: 0; pointer-events: none; animation: pf 0.1s infinite; }
+@keyframes pf { 0%,100% { background: rgba(255,0,60,0); } 50% { background: rgba(255,0,60,0.05); } }
+
+.pc { position: absolute; width: 40px; height: 40px; border-color: var(--c2); border-style: solid; }
+.pc.tl { top:16px; left:16px;   border-width: 2px 0 0 2px; }
+.pc.tr { top:16px; right:16px;  border-width: 2px 2px 0 0; }
+.pc.bl { bottom:16px; left:16px;  border-width: 0 0 2px 2px; }
+.pc.br { bottom:16px; right:16px; border-width: 0 2px 2px 0; }
+
+.panic-inner {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 16px; width: 100%; max-width: 420px; gap: 12px; text-align: center;
+}
+
+.p-alert {
+  width: 100%; background: var(--c2); color: #000;
+  font-family: 'Orbitron', monospace; font-size: clamp(8px,2.5vw,11px);
+  font-weight: 900; letter-spacing: 4px; padding: 7px;
+  animation: ablink 0.6s step-end infinite;
+}
+@keyframes ablink { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+.p-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(38px,12vw,72px); font-weight: 900;
+  color: var(--c2);
+  text-shadow: 0 0 40px var(--c2), 0 0 80px rgba(255,45,110,.3);
+  letter-spacing: 2px; line-height: 1;
+  animation: glitch 3s infinite;
+}
+@keyframes glitch {
+  0%,94%,100% { transform: translate(0); clip-path: none; }
+  95% { transform: translate(-3px,1px); }
+  96% { transform: translate(3px,-1px); clip-path: inset(20% 0 40% 0); }
+  97% { transform: translate(-2px); clip-path: inset(60% 0 10% 0); }
+  98% { transform: translate(0); clip-path: none; }
+}
+
+.p-product {
+  width: 100%; border: 1px solid rgba(255,45,110,.5);
+  background: rgba(255,45,110,.06); padding: 12px 16px; position: relative;
+}
+.p-product::before {
+  content: 'ORDER ID'; position: absolute; top: -8px; left: 12px;
+  background: #000; padding: 0 8px;
+  font-family: 'Orbitron', monospace; font-size: 9px; color: var(--c2); letter-spacing: 2px;
+}
+.p-name { font-family: 'Orbitron', monospace; font-size: clamp(11px,3.5vw,15px); color: #fff; letter-spacing: 1px; }
+
+.p-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: 100%; }
+.p-stat { border: 1px solid rgba(0,255,231,.15); background: rgba(0,255,231,.02); padding: 8px 4px; text-align: center; }
+.p-sv { font-family: 'Orbitron', monospace; font-size: clamp(9px,2.8vw,12px); color: var(--c); display: block; }
+.p-sl { font-size: 9px; color: var(--muted); letter-spacing: 1px; display: block; margin-top: 2px; }
+
+.timer-wrap { position: relative; display: flex; align-items: center; justify-content: center; width: 88px; height: 88px; }
+.timer-num { position: absolute; font-family: 'Orbitron', monospace; font-size: 26px; font-weight: 900; color: var(--c2); text-shadow: var(--glow2); }
+
+.hold-wrap { width: 100%; max-width: 290px; }
+.hold-lbl { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; text-align: center; font-family: 'Orbitron', monospace; }
+.hold-outer { position: relative; height: 46px; border: 1px solid rgba(255,45,110,.4); overflow: hidden; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.hold-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--c2), #ff6b9d); transition: width .05s linear; }
+.hold-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', monospace; font-size: clamp(9px,3vw,12px); font-weight: 700; color: #fff; letter-spacing: 2px; z-index: 2; }
+
+/* confirm stage */
+.cfm-box { width: 100%; max-width: 310px; border: 1px solid rgba(255,45,110,.4); padding: 22px 18px; position: relative; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.cfm-box::before { content: 'ANNULERING VEREIST BEVESTIGING'; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: #000; padding: 0 10px; font-family: 'Orbitron', monospace; font-size: 8px; color: var(--c2); letter-spacing: 2px; white-space: nowrap; }
+.cfm-inp { width: 100%; background: rgba(0,0,0,.6); border: 1px solid rgba(255,45,110,.35); padding: 12px 16px; color: var(--c); font-family: 'Orbitron', monospace; font-size: 14px; text-align: center; outline: none; letter-spacing: 3px; transition: border-color .2s; }
+.cfm-inp.ok { border-color: var(--c); box-shadow: var(--glow); }
+.cfm-btn { width: 100%; padding: 13px; font-family: 'Orbitron', monospace; font-size: 11px; font-weight: 700; letter-spacing: 2px; cursor: pointer; border: none; transition: all .2s; }
+.cfm-btn.on  { background: var(--c); color: #000; box-shadow: var(--glow); }
+.cfm-btn.off { background: rgba(255,255,255,.05); color: rgba(255,255,255,.2); cursor: not-allowed; }
+
+/* cancelled */
+.cxl { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; align-items: center; justify-content: center; }
+.cxl-inner { text-align: center; padding: 32px 24px; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.cxl-title { font-family: 'Orbitron', monospace; font-size: clamp(22px,7vw,36px); font-weight: 900; color: var(--c); text-shadow: var(--glow); }
+
+/* hud button */
+.hud-btn { background: transparent; border: 1px solid var(--c); color: var(--c); font-family: 'Orbitron', monospace; font-size: clamp(10px,2.8vw,12px); font-weight: 700; letter-spacing: 2px; padding: 13px 26px; cursor: pointer; position: relative; overflow: hidden; transition: color .2s; }
+.hud-btn::before { content: ''; position: absolute; inset: 0; background: var(--c); transform: translateX(-101%); transition: transform .2s; }
+.hud-btn:hover::before { transform: translateX(0); }
+.hud-btn:hover { color: #000; }
+.hud-btn span { position: relative; z-index: 1; }
+
+/* ═══ NAV ═══ */
+.nav { position: sticky; top: 0; z-index: 50; background: rgba(2,8,18,.93); border-bottom: 1px solid rgba(0,255,231,.1); backdrop-filter: blur(16px); padding: 0 16px; display: flex; align-items: center; gap: 14px; height: 56px; }
+.nav-logo { font-family: 'Orbitron', monospace; font-size: clamp(13px,4vw,19px); font-weight: 900; color: var(--c); text-shadow: var(--glow); cursor: pointer; white-space: nowrap; letter-spacing: 2px; }
+.nav-logo em { color: var(--c2); font-style: normal; }
+.nav-sw { flex: 1; position: relative; display: flex; align-items: center; }
+.nav-brd { position: absolute; inset: 0; pointer-events: none; border: 1px solid rgba(0,255,231,.2); }
+.nav-brd::before, .nav-brd::after { content: ''; position: absolute; width: 8px; height: 8px; border-color: var(--c); border-style: solid; }
+.nav-brd::before { top:-1px; left:-1px; border-width: 2px 0 0 2px; }
+.nav-brd::after  { bottom:-1px; right:-1px; border-width: 0 2px 2px 0; }
+.nav-inp { flex: 1; background: rgba(0,255,231,.02); border: none; outline: none; padding: 9px 14px; color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 500; min-width: 0; }
+.nav-inp::placeholder { color: rgba(0,255,231,.2); }
+.nav-btn { background: var(--c); border: none; padding: 9px 16px; font-family: 'Orbitron', monospace; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #000; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background .15s; }
+.nav-btn:hover { background: #fff; }
+
+/* ═══ HERO ═══ */
+.hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; position: relative; z-index: 1; text-align: center; }
+.hero-eye { font-family: 'Orbitron', monospace; font-size: clamp(8px,2vw,10px); letter-spacing: 5px; color: var(--c); margin-bottom: 18px; opacity: .6; animation: fsd .8s ease both; }
+.hero-logo-wrap { position: relative; display: inline-block; margin-bottom: 4px; animation: fsd .8s .1s ease both; }
+.hero-logo-bg   { font-family: 'Orbitron', monospace; font-size: clamp(52px,15vw,120px); font-weight: 900; line-height: 1; color: transparent; -webkit-text-stroke: 1.5px rgba(0,255,231,.2); letter-spacing: -2px; user-select: none; }
+.hero-logo-fill { position: absolute; inset: 0; font-family: 'Orbitron', monospace; font-size: clamp(52px,15vw,120px); font-weight: 900; line-height: 1; color: var(--c); letter-spacing: -2px; text-shadow: 0 0 60px rgba(0,255,231,.4); clip-path: inset(0 100% 0 0); animation: reveal 1.8s .4s cubic-bezier(.22,1,.36,1) forwards; }
+@keyframes reveal { to { clip-path: inset(0 0% 0 0); } }
+.hero-sub { font-size: clamp(15px,3.5vw,19px); color: rgba(224,244,255,.45); margin: 18px 0 36px; line-height: 1.8; font-weight: 300; max-width: 480px; animation: fsd .8s .3s ease both; }
+.hero-sub strong { color: var(--c); font-weight: 600; }
+
+.hero-sb       { width: 100%; max-width: 560px; animation: fsd .8s .4s ease both; }
+.hero-sb-inner { position: relative; border: 1px solid rgba(0,255,231,.3); display: flex; align-items: center; background: rgba(0,255,231,.02); transition: border-color .2s, box-shadow .2s; }
+.hero-sb-inner:focus-within { border-color: var(--c); box-shadow: 0 0 40px rgba(0,255,231,.12); }
+.hero-sb-inner::before, .hero-sb-inner::after { content: ''; position: absolute; width: 12px; height: 12px; border-color: var(--c); border-style: solid; }
+.hero-sb-inner::before { top:-1px; left:-1px; border-width: 2px 0 0 2px; }
+.hero-sb-inner::after  { bottom:-1px; right:-1px; border-width: 0 2px 2px 0; }
+.hero-inp { flex: 1; background: none; border: none; outline: none; padding: 17px 20px; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 500; color: var(--text); letter-spacing: .5px; }
+.hero-inp::placeholder { color: rgba(0,255,231,.18); }
+.hero-go { background: var(--c); border: none; padding: 17px 22px; font-family: 'Orbitron', monospace; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #000; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background .15s; }
+.hero-go:hover { background: #fff; }
+
+.qtags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 18px; animation: fsd .8s .5s ease both; }
+.qtag  { background: transparent; border: 1px solid rgba(0,255,231,.15); padding: 6px 14px; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 500; color: rgba(0,255,231,.4); cursor: pointer; letter-spacing: 1px; transition: all .15s; }
+.qtag:hover { border-color: var(--c); color: var(--c); background: rgba(0,255,231,.04); }
+
+.feats { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 44px; width: 100%; max-width: 480px; animation: fsd .8s .6s ease both; }
+.feat { border: 1px solid rgba(0,255,231,.08); padding: 14px; text-align: left; background: rgba(0,255,231,.02); position: relative; }
+.feat::before { content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 100%; background: linear-gradient(to bottom, var(--c), transparent); }
+.feat-icon { font-size: 18px; margin-bottom: 5px; }
+.feat-lbl  { font-size: 12px; color: rgba(0,255,231,.4); line-height: 1.5; letter-spacing: .5px; }
+
+/* ═══ LOADING ═══ */
+.load { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 22px; }
+.load-hex { width: 56px; height: 56px; border: 2px solid var(--c); clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); animation: hspin 1.1s linear infinite; box-shadow: var(--glow); }
+@keyframes hspin { to { transform: rotate(360deg); } }
+.load-txt { font-family: 'Orbitron', monospace; font-size: 11px; color: var(--c); letter-spacing: 3px; animation: lpulse 1.5s ease-in-out infinite; }
+@keyframes lpulse { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+.load-bar  { width: 180px; height: 2px; background: rgba(0,255,231,.08); overflow: hidden; }
+.load-fill { height: 100%; background: var(--c); box-shadow: var(--glow); animation: lbar 1.5s ease-in-out infinite; }
+@keyframes lbar { 0% { width:0%; margin-left:0; } 50% { width:60%; margin-left:20%; } 100% { width:0%; margin-left:100%; } }
+
+/* ═══ PAGE ═══ */
+.page { padding: 24px 16px; max-width: 960px; margin: 0 auto; position: relative; z-index: 1; }
+
+.ph { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; padding-bottom: 14px; border-bottom: 1px solid rgba(0,255,231,.08); }
+.ph-title { font-family: 'Orbitron', monospace; font-size: clamp(10px,2.8vw,14px); color: var(--c); letter-spacing: 2px; }
+.ai-badge { display: flex; align-items: center; gap: 6px; font-family: 'Orbitron', monospace; font-size: 9px; color: var(--c); letter-spacing: 2px; opacity: .55; }
+.ai-dot   { width: 5px; height: 5px; border-radius: 50%; background: var(--c); box-shadow: var(--glow); animation: lpulse 1.5s ease infinite; }
+
+/* ═══ PRODUCT GRID ═══ */
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px,1fr)); gap: 14px; }
+.rc {
+  border: 1px solid rgba(0,255,231,.1); background: rgba(5,13,26,.85);
+  cursor: pointer; overflow: hidden; position: relative;
+  transition: border-color .2s, transform .2s;
+  animation: cin .4s ease both;
+}
+.rc:nth-child(1){animation-delay:.00s} .rc:nth-child(2){animation-delay:.07s}
+.rc:nth-child(3){animation-delay:.14s} .rc:nth-child(4){animation-delay:.21s} .rc:nth-child(5){animation-delay:.28s}
+@keyframes cin { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.rc::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg,transparent,var(--c),transparent); transform:scaleX(0); transition:transform .3s; }
+.rc:hover { border-color: var(--c); transform: translateY(-5px); }
+.rc:hover::before { transform: scaleX(1); }
+.rc-img-w { position: relative; aspect-ratio: 1; overflow: hidden; }
+.rc-img   { width:100%; height:100%; object-fit:cover; filter: saturate(.6) brightness(.75); transition: filter .3s; }
+.rc:hover .rc-img { filter: saturate(.9) brightness(.9); }
+.rc-ov    { position:absolute; inset:0; background:linear-gradient(135deg,rgba(0,255,231,.08),transparent); opacity:0; transition:opacity .3s; }
+.rc:hover .rc-ov { opacity:1; }
+.rc-idx   { position:absolute; top:7px; right:7px; font-family:'Orbitron',monospace; font-size:9px; color:var(--c); background:rgba(0,0,0,.8); padding:2px 7px; letter-spacing:1px; }
+.rc-body  { padding: 11px; }
+.rc-cat   { font-family:'Orbitron',monospace; font-size:8px; color:var(--c); letter-spacing:2px; margin-bottom:4px; opacity:.65; text-transform:uppercase; }
+.rc-name  { font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:600; color:var(--text); line-height:1.3; margin-bottom:5px; }
+.rc-price { font-family:'Orbitron',monospace; font-size:10px; color:var(--c2); letter-spacing:1px; }
+.rc-desc  { font-size:11px; color:rgba(224,244,255,.35); margin-top:5px; line-height:1.5; }
+
+/* ═══ COMPARE ═══ */
+.back-btn { background:none; border:1px solid rgba(0,255,231,.15); padding:6px 14px; color:var(--muted); cursor:pointer; font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; margin-bottom:22px; transition:all .15s; }
+.back-btn:hover { border-color:var(--c); color:var(--c); }
+.cmp-head { margin-bottom: 22px; }
+.cmp-name { font-family:'Orbitron',monospace; font-size:clamp(15px,4.5vw,26px); font-weight:900; color:var(--c); text-shadow:var(--glow); margin-bottom:5px; }
+.cmp-meta { font-size:12px; color:var(--muted); letter-spacing:1px; }
+
+.olist { display: flex; flex-direction: column; gap: 10px; }
+.oc {
+  display:flex; align-items:center; gap:14px;
+  border:1px solid rgba(0,255,231,.08); background:rgba(5,13,26,.9);
+  padding:16px 18px; cursor:pointer; position:relative; overflow:hidden;
+  transition:all .2s; animation:cin .3s ease both;
+}
+.oc:nth-child(1){animation-delay:.00s; border-color:rgba(0,255,231,.3);}
+.oc:nth-child(2){animation-delay:.05s} .oc:nth-child(3){animation-delay:.10s}
+.oc:nth-child(4){animation-delay:.15s} .oc:nth-child(5){animation-delay:.20s}
+.oc:hover { border-color:var(--c); transform:translateX(5px); box-shadow:-3px 0 16px rgba(0,255,231,.08); }
+.oc::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:rgba(0,255,231,.15); transition:background .2s; }
+.oc:first-child::before { background:var(--c); box-shadow:var(--glow); }
+.oc:hover::before { background:var(--c); }
+
+.oc-rank  { font-family:'Orbitron',monospace; font-size:20px; font-weight:900; color:rgba(0,255,231,.18); min-width:32px; text-align:center; flex-shrink:0; }
+.oc:first-child .oc-rank  { color:var(--c); text-shadow:var(--glow); }
+.oc-info  { flex:1; min-width:0; }
+.oc-shop  { font-family:'Orbitron',monospace; font-size:clamp(12px,3.2vw,15px); font-weight:700; color:var(--text); margin-bottom:3px; }
+.oc-meta  { font-size:12px; color:var(--muted); letter-spacing:.5px; }
+.oc-reason{ font-size:11px; color:rgba(0,255,231,.25); margin-top:3px; font-style:italic; }
+.oc-badge { display:inline-block; margin-top:5px; border:1px solid rgba(0,255,231,.25); padding:2px 9px; font-family:'Orbitron',monospace; font-size:8px; color:var(--c); letter-spacing:2px; }
+.oc:first-child .oc-badge { border-color:var(--c); box-shadow:var(--glow); }
+.oc-pc    { text-align:right; flex-shrink:0; }
+.oc-price { font-family:'Orbitron',monospace; font-size:clamp(14px,4vw,22px); font-weight:900; color:var(--text); }
+.oc:first-child .oc-price { color:var(--c); text-shadow:var(--glow); }
+.oc-comm  { font-size:10px; color:rgba(0,255,231,.25); margin-top:2px; letter-spacing:1px; }
+.oc-link  { background:none; border:1px solid rgba(0,255,231,.12); padding:5px 9px; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0; transition:all .15s; }
+.oc-link:hover { border-color:var(--c); color:var(--c); }
+
+.db-bar { margin-top:22px; padding:13px 16px; border:1px solid rgba(0,255,231,.08); background:rgba(0,255,231,.015); font-size:12px; color:var(--muted); letter-spacing:.5px; display:flex; align-items:center; gap:10px; }
+.db-bar strong { color:var(--c); font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px; }
+
+/* ═══ MODAL ═══ */
+.m-ov  { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+.m-box { background:var(--bg2); width:330px; border:1px solid rgba(0,255,231,.25); position:relative; }
+.m-box::before,.m-box::after { content:''; position:absolute; width:12px; height:12px; border-color:var(--c); border-style:solid; }
+.m-box::before { top:-1px; left:-1px; border-width:2px 0 0 2px; }
+.m-box::after  { bottom:-1px; right:-1px; border-width:0 2px 2px 0; }
+.m-head { padding:13px 16px; border-bottom:1px solid rgba(0,255,231,.08); display:flex; align-items:center; justify-content:space-between; font-family:'Orbitron',monospace; font-size:10px; color:var(--c); letter-spacing:2px; }
+.m-cls  { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; line-height:1; }
+.m-body { padding:18px; display:flex; flex-direction:column; gap:9px; font-size:13px; color:var(--muted); }
+.m-body strong { color:var(--text); }
+.m-body code   { font-family:'Orbitron',monospace; font-size:10px; color:var(--c); background:rgba(0,255,231,.04); padding:2px 8px; }
+
+/* ═══ ERROR ═══ */
+.err-box { text-align:center; padding:48px 20px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+.err-msg { font-family:'Orbitron',monospace; font-size:11px; color:var(--c2); letter-spacing:2px; }
+
+@keyframes fsd { from { opacity:0; transform:translateY(-14px); } to { opacity:1; transform:translateY(0); } }
+`;
+
+// ── PanicScreen ───────────────────────────────────────────────────────────────
+function PanicScreen({ product, onDismiss }) {
+  const [secs, setSecs] = useState(59);
+  const [stage, setStage] = useState("panic"); // panic | confirm | cancelled
+  const [holdP, setHoldP] = useState(0);
+  const [cfmVal, setCfmVal] = useState("");
+  const holdRef = useRef(null);
+
+  // countdown
+  useEffect(() => {
+    const t = setInterval(() => setSecs(s => {
+      if (s <= 1) { clearInterval(t); onDismiss(); return 0; }
+      return s - 1;
+    }), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const startHold = () => {
+    holdRef.current = setInterval(() => {
+      setHoldP(p => {
+        if (p >= 100) { clearInterval(holdRef.current); setStage("confirm"); return 100; }
+        return p + 4;
+      });
+    }, 40);
+  };
+  const stopHold = () => { clearInterval(holdRef.current); setHoldP(p => p >= 100 ? 100 : 0); };
+
+  const cfmOk = cfmVal.trim().toUpperCase() === "ANNULEER";
+
+  if (stage === "cancelled") return (
+    <div className="cxl">
+      <div className="cxl-inner">
+        <div style={{ fontSize: 50 }}>⚡</div>
+        <div className="cxl-title">GEANNULEERD</div>
+        <p style={{ fontSize: 15, color: "rgba(0,255,231,.35)", lineHeight: 1.8 }}>
+          Had je dit maar eerder gedaan —<br />ShopAI had je de beste prijs gevonden.
+        </p>
+        <button className="hud-btn" onClick={onDismiss} style={{ marginTop: 8 }}>
+          <span>SLIMMER SHOPPEN →</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  if (stage === "confirm") return (
+    <div className="panic">
+      <div className="panic-flash" />
+      <div className="pc tl" /><div className="pc tr" /><div className="pc bl" /><div className="pc br" />
+      <div className="panic-inner">
+        <div className="p-alert">⚠ BEVESTIGING VEREIST ⚠</div>
+        <div style={{ fontSize: 44 }}>🔒</div>
+        <div className="p-title" style={{ fontSize: "clamp(22px,7vw,40px)" }}>WEET JE HET ZEKER?</div>
+        <div className="p-product" style={{ width: "100%" }}><div className="p-name">{product}</div></div>
+        <p style={{ fontSize: 11, color: "rgba(255,45,110,.6)", letterSpacing: 1, fontFamily: "'Orbitron',monospace", lineHeight: 1.8 }}>
+          DEFINITIEF · KAN NIET WORDEN TERUGGEDRAAID
+        </p>
+        <div className="cfm-box">
+          <p style={{ fontSize: 11, color: "var(--muted)", letterSpacing: 1, fontFamily: "'Orbitron',monospace" }}>TYP ANNULEER OM TE BEVESTIGEN</p>
+          <input className={`cfm-inp${cfmOk ? " ok" : ""}`} value={cfmVal}
+            onChange={e => setCfmVal(e.target.value)} placeholder="_ _ _ _ _ _ _ _" />
+          <button className={`cfm-btn ${cfmOk ? "on" : "off"}`}
+            onClick={() => cfmOk && setStage("cancelled")}>
+            BEVESTIG ANNULERING
+          </button>
+          <button onClick={() => { setStage("panic"); setHoldP(0); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,.2)", fontSize: 11, cursor: "pointer", fontFamily: "'Orbitron',monospace", letterSpacing: 1, marginTop: 4 }}>
+            ← TERUG
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="panic">
+      <div className="panic-flash" />
+      <div className="pc tl" /><div className="pc tr" /><div className="pc bl" /><div className="pc br" />
+      {[...Array(8)].map((_, i) => (
+        <div key={i} style={{ position: "absolute", left: 0, right: 0, height: 1, background: "rgba(255,45,110,.07)", top: `${8 + i * 11}%`, animation: `ablink ${.7 + i * .15}s step-end infinite`, pointerEvents: "none" }} />
+      ))}
+      <div className="panic-inner">
+        <div className="p-alert">🚨 ORDERBEVESTIGING — BETALING GESLAAGD 🚨</div>
+        <div className="p-title">BETAALD!</div>
+        <div className="p-product" style={{ width: "100%" }}><div className="p-name">{product}</div></div>
+        <div className="p-stats">
+          {[{ v: "iDEAL", l: "BETAALMETHODE" }, { v: "MORGEN", l: "BEZORGING" }, { v: "✓ SENT", l: "BEVESTIGING" }].map(s => (
+            <div className="p-stat" key={s.l}><span className="p-sv">{s.v}</span><span className="p-sl">{s.l}</span></div>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", justifyContent: "center" }}>
+          <div className="timer-wrap">
+            <svg width="88" height="88" viewBox="0 0 88 88">
+              <circle cx="44" cy="44" r="38" fill="none" stroke="rgba(255,45,110,.1)" strokeWidth="5" />
+              <circle cx="44" cy="44" r="38" fill="none" stroke="var(--c2)" strokeWidth="5"
+                strokeDasharray={`${(secs / 59) * 238.8} 238.8`} strokeLinecap="butt"
+                style={{ transform: "rotate(-90deg)", transformOrigin: "44px 44px", transition: "stroke-dasharray 1s linear", filter: "drop-shadow(0 0 8px rgba(255,45,110,.6))" }} />
+            </svg>
+            <div className="timer-num">{secs}</div>
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", lineHeight: 2.2, fontFamily: "'Orbitron',monospace", letterSpacing: 1 }}>
+            <div>SEC. RESTEREND</div><div style={{ color: "rgba(255,45,110,.55)" }}>ANNULEER NU</div>
+          </div>
+        </div>
+        <div className="hold-wrap">
+          <div className="hold-lbl">Houd ingedrukt om te annuleren</div>
+          <div className="hold-outer" onMouseDown={startHold} onMouseUp={stopHold} onMouseLeave={stopHold} onTouchStart={startHold} onTouchEnd={stopHold}>
+            <div className="hold-fill" style={{ width: `${holdP}%` }} />
+            <div className="hold-text">{holdP > 0 ? `${Math.round(holdP)}%` : "❌  ANNULEER BESTELLING"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AffModal ──────────────────────────────────────────────────────────────────
+function AffModal({ shop, onClose }) {
+  const aff = affiliateDB[shop] || { id: "AUTO-GEN", commission: "3%" };
+  return (
+    <div className="m-ov" onClick={onClose}>
+      <div className="m-box" onClick={e => e.stopPropagation()}>
+        <div className="m-head"><span>// AFFILIATE NODE</span><button className="m-cls" onClick={onClose}>×</button></div>
+        <div className="m-body">
+          <p><strong>SHOP:</strong> {shop}</p>
+          <p><strong>NODE ID:</strong> <code>{aff.id}</code></p>
+          <p><strong>COMMISSIE:</strong> {aff.commission}</p>
+          <p><strong>STATUS:</strong> {affiliateDB[shop] ? "✅ ACTIEF" : "⏳ AUTO-GEGENEREERD"}</p>
+          <p style={{ fontSize: 11, opacity: .45, marginTop: 6 }}>Link automatisch gegenereerd en opgeslagen in affiliate matrix.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+function Loading({ msg }) {
+  return (
+    <div className="load">
+      <div className="load-hex" />
+      <div className="load-txt">{msg}</div>
+      <div className="load-bar"><div className="load-fill" /></div>
+    </div>
+  );
+}
+
+// ── Topbar ────────────────────────────────────────────────────────────────────
+function Topbar({ inputVal, setInputVal, onSearch, onLogoClick }) {
+  return (
+    <nav className="nav">
+      <div className="nav-logo" onClick={onLogoClick}>SHOP<em>AI</em></div>
+      <div className="nav-sw">
+        <div className="nav-brd" />
+        <input className="nav-inp" value={inputVal}
+          onChange={e => setInputVal(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && onSearch()}
+          placeholder="SCAN PRODUCT..." />
+        <button className="nav-btn" onClick={onSearch}>SCAN</button>
+      </div>
+    </nav>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+function ShopAI() {
+  const [phase, setPhase] = useState("panic");   // panic | search | results | compare
+  const [query, setQuery] = useState("");
+  const [inputVal, setInputVal] = useState("");
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [affModal, setAffModal] = useState(null);
+
+  const [panicProduct] = useState(() => {
+    const items = [
+      "Sony WH-1000XM5 Koptelefoon — €279,00",
+      "Dyson V15 Detect Stofzuiger — €649,00",
+      "Apple MacBook Pro 14\" M3 — €2.199,00",
+      "Samsung Galaxy S24 Ultra — €1.299,00",
+    ];
+    return items[Math.floor(Math.random() * items.length)];
+  });
+
+  const doSearch = async (q) => {
+    const sq = (q || inputVal).trim();
+    if (!sq) return;
+    setQuery(sq);
+    setInputVal(sq);
+    setLoading(true);
+    setAiError(null);
+    setPhase("results");
+    try {
+      const data = await fetchProducts(sq);
+      setResults(data);
+    } catch (err) {
+      setAiError("VERBINDING MISLUKT — PROBEER OPNIEUW");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const doOffers = async (product) => {
+    setSelected(product);
+    setLoading(true);
+    setAiError(null);
+    setPhase("compare");
+    try {
+      const data = await fetchOffers(product);
+      setOffers(data);
+    } catch (err) {
+      setAiError("SCAN MISLUKT — PROBEER OPNIEUW");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openShop = (shop, product) => {
+    const slug = product.name.toLowerCase().replace(/\s+/g, "-");
+    window.open(generateAffiliateLink(shop, slug), "_blank");
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <style>{CSS}</style>
+
+      {/* BG effects */}
+      <div className="hud-bg" />
+      <div className="hud-orb" style={{ width: 700, height: 700, top: -300, left: "25%", background: "rgba(0,255,231,.03)" }} />
+      <div className="hud-orb" style={{ width: 500, height: 500, bottom: -150, right: -100, background: "rgba(255,45,110,.04)" }} />
+
+      {/* ── PANIC ── */}
+      {phase === "panic" && (
+        <PanicScreen product={panicProduct} onDismiss={() => setPhase("search")} />
+      )}
+
+      {/* ── HERO / ZOEKEN ── */}
+      {phase === "search" && (
+        <div className="hero">
+          <div className="hero-eye">// INTELLIGENT SHOPPING SYSTEM v2.0</div>
+          <div className="hero-logo-wrap">
+            <div className="hero-logo-bg" aria-hidden>SHOPAI</div>
+            <div className="hero-logo-fill" aria-hidden>SHOPAI</div>
+          </div>
+          <p className="hero-sub">
+            AI scant <strong>5 producten</strong>. Klik er één aan.<br />
+            Vergelijk <strong>5 winkels</strong> — altijd de laagste prijs bovenaan.
+          </p>
+          <div className="hero-sb">
+            <div className="hero-sb-inner">
+              <input className="hero-inp" placeholder="ZOEK EEN PRODUCT..."
+                value={inputVal} onChange={e => setInputVal(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && doSearch()} />
+              <button className="hero-go" onClick={() => doSearch()}>ZOEKEN</button>
+            </div>
+            <div className="qtags">
+              {["Koptelefoon", "Laptop", "Sneakers", "Koffie", "Smart TV", "Camera"].map(t => (
+                <button key={t} className="qtag" onClick={() => doSearch(t)}>{t}</button>
+              ))}
+            </div>
+          </div>
+          <div className="feats">
+            {[
+              { icon: "🤖", l: "AI selecteert 5 beste opties" },
+              { icon: "⚖️", l: "Vergelijk 5 winkels per product" },
+              { icon: "🔗", l: "Automatische affiliate matrix" },
+              { icon: "⚡", l: "Laagste prijs altijd bovenaan" },
+            ].map(f => (
+              <div className="feat" key={f.l}>
+                <div className="feat-icon">{f.icon}</div>
+                <div className="feat-lbl">{f.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── RESULTATEN ── */}
+      {phase === "results" && (
+        <>
+          <Topbar inputVal={inputVal} setInputVal={setInputVal} onSearch={() => doSearch()} onLogoClick={() => setPhase("search")} />
+          <div className="page">
+            {loading ? (
+              <Loading msg={`AI SCANT "${query.toUpperCase()}"...`} />
+            ) : aiError ? (
+              <div className="err-box">
+                <div style={{ fontSize: 36 }}>⚠</div>
+                <div className="err-msg">{aiError}</div>
+                <button className="hud-btn" onClick={() => doSearch(query)} style={{ marginTop: 8 }}><span>OPNIEUW</span></button>
+              </div>
+            ) : (
+              <>
+                <div className="ph">
+                  <div className="ph-title">// {results.length} RESULTATEN VOOR "{query.toUpperCase()}"</div>
+                  <div className="ai-badge"><div className="ai-dot" />CLAUDE AI</div>
+                </div>
+                <div className="rgrid">
+                  {results.map((r, i) => (
+                    <div key={r.id || i} className="rc" onClick={() => doOffers(r)}>
+                      <div className="rc-img-w">
+                        <img className="rc-img" src={r.image} alt={r.name} />
+                        <div className="rc-ov" />
+                        <div className="rc-idx">0{i + 1}</div>
+                      </div>
+                      <div className="rc-body">
+                        <div className="rc-cat">{r.emoji} {(r.category || "").toUpperCase()}</div>
+                        <div className="rc-name">{r.name}</div>
+                        <div className="rc-price">{r.priceRange}</div>
+                        {r.description && <div className="rc-desc">{r.description}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── VERGELIJKEN ── */}
+      {phase === "compare" && (
+        <>
+          <Topbar inputVal={inputVal} setInputVal={setInputVal} onSearch={() => doSearch()} onLogoClick={() => setPhase("search")} />
+          <div className="page">
+            <button className="back-btn" onClick={() => setPhase("results")}>← TERUG</button>
+            {loading ? (
+              <Loading msg="WINKELS SCANNEN..." />
+            ) : aiError ? (
+              <div className="err-box">
+                <div style={{ fontSize: 36 }}>⚠</div>
+                <div className="err-msg">{aiError}</div>
+                <button className="hud-btn" onClick={() => doOffers(selected)} style={{ marginTop: 8 }}><span>OPNIEUW</span></button>
+              </div>
+            ) : (
+              <>
+                <div className="cmp-head">
+                  <div style={{ fontSize: 10, fontFamily: "'Orbitron',monospace", color: "var(--muted)", letterSpacing: 3, marginBottom: 7 }}>// PRIJSVERGELIJKING</div>
+                  <div className="cmp-name">{selected?.name}</div>
+                  <div className="cmp-meta">5 WINKELS GESCAND · GESORTEERD OP PRIJS · AFFILIATE ACTIEF</div>
+                </div>
+                <div className="olist">
+                  {offers.map((o, i) => (
+                    <div key={o.shop + i} className="oc" onClick={() => openShop(o.shop, selected)}>
+                      <div className="oc-rank">#{i + 1}</div>
+                      <div className="oc-info">
+                        <div className="oc-shop">{o.shop}</div>
+                        <div className="oc-meta">★ {o.rating} · {o.delivery}</div>
+                        {o.reason && <div className="oc-reason">{o.reason}</div>}
+                        {o.badge && <div className="oc-badge">{o.badge}</div>}
+                      </div>
+                      <div className="oc-pc">
+                        <div className="oc-price">€{o.price}</div>
+                        <div className="oc-comm">
+                          {affiliateDB[o.shop] ? `${affiliateDB[o.shop].commission} comm.` : "LINK ACTIEF"}
+                        </div>
+                      </div>
+                      <button className="oc-link" title="Affiliate info"
+                        onClick={e => { e.stopPropagation(); setAffModal(o.shop); }}>🔗</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="db-bar">
+                  <span style={{ color: "var(--c)", fontSize: 16 }}>◈</span>
+                  <span>
+                    <strong>AFFILIATE MATRIX:</strong> {Object.keys(affiliateDB).length} nodes actief · Nieuwe winkels automatisch geregistreerd
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {affModal && <AffModal shop={affModal} onClose={() => setAffModal(null)} />}
+    </div>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(ShopAI));
+  </script>
 </body>
 </html>
