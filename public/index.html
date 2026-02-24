@@ -91,13 +91,18 @@ const PRODUCT_IMGS = {
 };
 
 function getImg(name, cat) {
-  const t = `${name} ${cat}`.toLowerCase();
-  // Langste/meest specifieke trefwoorden eerst controleren
   const sorted = Object.entries(PRODUCT_IMGS)
     .filter(([k]) => k !== "default")
     .sort((a, b) => b[0].length - a[0].length);
+  // Eerst alleen productnaam (meest betrouwbaar)
+  const nameLower = name.toLowerCase();
   for (const [keyword, url] of sorted) {
-    if (t.includes(keyword)) return url;
+    if (nameLower.includes(keyword)) return url;
+  }
+  // Dan categorie als fallback
+  const catLower = (cat || "").toLowerCase();
+  for (const [keyword, url] of sorted) {
+    if (catLower.includes(keyword)) return url;
   }
   return PRODUCT_IMGS["default"];
 }
