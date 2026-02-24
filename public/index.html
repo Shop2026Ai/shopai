@@ -37,7 +37,7 @@ function generateAffiliateLink(shop, slug) {
     "mediamarkt.nl": `https://www.mediamarkt.nl/nl/search.html?query=${query}`,
     "nedgame.nl":    `https://www.nedgame.nl/zoeken/?searchstring=${query}`,
     "alternate.nl":  `https://www.alternate.nl/listing.xhtml?q=${query}`,
-    "wehkamp.nl":    `https://www.wehkamp.nl/zoeken/?q=${query}`,
+    "wehkamp.nl":    `https://www.wehkamp.nl/zoeken/?term=${query}`,
     "zalando.nl":    `https://www.zalando.nl/catalogus/?q=${query}`,
   };
   return searchUrls[shop] || `https://${shop}/search?q=${query}`;
