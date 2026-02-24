@@ -170,7 +170,10 @@ async function fetchProducts(query) {
   const data = await callClaude(
     `Je bent een Nederlandse shopping-assistent voor ShopAI.
 Gebruiker zoekt: "${query}"
-Geef exact 5 productaanbevelingen als JSON array. BELANGRIJK: Alle 5 producten moeten direct gerelateerd zijn aan "${query}" — geef alleen varianten van hetzelfde product (verschillende modellen, versies of uitvoeringen). Geen accessoires, geen concurrerende productcategorieën. Geen Temu, AliExpress of Alibaba.
+Geef exact 5 productaanbevelingen als JSON array.
+STRIKTE REGEL: Elk product MOET het exacte merk en type bevatten van "${query}". Als de gebruiker zoekt op "PlayStation 5" dan mogen ALLEEN PlayStation 5 producten worden getoond — geen Xbox, geen Nintendo, geen speakers, geen camera's, geen controllers tenzij expliciet gezocht. Alleen varianten zoals Slim, Digital Edition, bundels of officiële Sony PS5 accessoires.
+Als de gebruiker zoekt op "Nike Air Max" dan alleen Nike Air Max modellen. Geen Adidas, geen andere Nike schoenen.
+Geen Temu, AliExpress of Alibaba.
 Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: televisie/audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "description"(1 zin waarom goed).
 Alleen de JSON array, direct beginnen met [`
   );
