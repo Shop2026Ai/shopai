@@ -17,25 +17,31 @@
 
 
 // ── Affiliate DB ─────────────────────────────────────────────────────────────
+// Echte winkel URLs - affiliate links worden later toegevoegd
 const affiliateDB = {
-  "bol.com":       { base: "https://partner.bol.com/click",  id: "SHOPAI-BOL-001", commission: "7%" },
-  "amazon.nl":     { base: "https://www.amazon.nl/ref=shopai", id: "shopai-21",    commission: "5%" },
-  "coolblue.nl":   { base: "https://www.coolblue.nl/aff",    id: "SHOPAI-CB-001",  commission: "4%" },
-  "mediamarkt.nl": { base: "https://www.mediamarkt.nl/aff",  id: "SHOPAI-MM-001",  commission: "3%" },
-  "nedgame.nl":    { base: "https://www.nedgame.nl/aff",     id: "SHOPAI-NG-001",  commission: "6%" },
-  "alternate.nl":  { base: "https://www.alternate.nl/aff",   id: "SHOPAI-AL-001",  commission: "4%" },
-  "wehkamp.nl":    { base: "https://www.wehkamp.nl/aff",     id: "SHOPAI-WH-001",  commission: "5%" },
-  "zalando.nl":    { base: "https://www.zalando.nl/aff",     id: "SHOPAI-ZL-001",  commission: "8%" },
+  "bol.com":       { base: "https://www.bol.com/nl/s/",      id: "", commission: "7%" },
+  "amazon.nl":     { base: "https://www.amazon.nl/s",        id: "", commission: "5%" },
+  "coolblue.nl":   { base: "https://www.coolblue.nl/zoeken", id: "", commission: "4%" },
+  "mediamarkt.nl": { base: "https://www.mediamarkt.nl/nl/search.html", id: "", commission: "3%" },
+  "nedgame.nl":    { base: "https://www.nedgame.nl/zoeken",  id: "", commission: "6%" },
+  "alternate.nl":  { base: "https://www.alternate.nl/search", id: "", commission: "4%" },
+  "wehkamp.nl":    { base: "https://www.wehkamp.nl/zoeken",  id: "", commission: "5%" },
+  "zalando.nl":    { base: "https://www.zalando.nl/catalogus/", id: "", commission: "8%" },
 };
 
 function generateAffiliateLink(shop, slug) {
-  const aff = affiliateDB[shop];
-  if (!aff) {
-    const id = `SHOPAI-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    affiliateDB[shop] = { base: `https://${shop}/aff`, id, commission: "3%" };
-    return `https://${shop}/aff?tag=${id}&q=${slug}`;
-  }
-  return `${aff.base}?tag=${aff.id}&q=${slug}&src=shopai`;
+  const query = encodeURIComponent(slug.replace(/-/g, ' '));
+  const searchUrls = {
+    "bol.com":       `https://www.bol.com/nl/s/?searchtext=${query}`,
+    "amazon.nl":     `https://www.amazon.nl/s?k=${query}`,
+    "coolblue.nl":   `https://www.coolblue.nl/zoeken?query=${query}`,
+    "mediamarkt.nl": `https://www.mediamarkt.nl/nl/search.html?query=${query}`,
+    "nedgame.nl":    `https://www.nedgame.nl/zoeken/?searchstring=${query}`,
+    "alternate.nl":  `https://www.alternate.nl/search?query=${query}`,
+    "wehkamp.nl":    `https://www.wehkamp.nl/zoeken/?q=${query}`,
+    "zalando.nl":    `https://www.zalando.nl/catalogus/?q=${query}`,
+  };
+  return searchUrls[shop] || `https://${shop}/search?q=${query}`;
 }
 
 // ── Images ───────────────────────────────────────────────────────────────────
