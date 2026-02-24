@@ -92,8 +92,12 @@ const PRODUCT_IMGS = {
 
 function getImg(name, cat) {
   const t = `${name} ${cat}`.toLowerCase();
-  for (const [keyword, url] of Object.entries(PRODUCT_IMGS)) {
-    if (keyword !== "default" && t.includes(keyword)) return url;
+  // Langste/meest specifieke trefwoorden eerst controleren
+  const sorted = Object.entries(PRODUCT_IMGS)
+    .filter(([k]) => k !== "default")
+    .sort((a, b) => b[0].length - a[0].length);
+  for (const [keyword, url] of sorted) {
+    if (t.includes(keyword)) return url;
   }
   return PRODUCT_IMGS["default"];
 }
