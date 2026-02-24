@@ -29,7 +29,9 @@ const affiliateDB = {
 };
 
 function generateAffiliateLink(shop, slug) {
-  const query = encodeURIComponent(slug.replace(/-/g, ' '));
+  // Gebruik alleen eerste 3 woorden en verwijder speciale tekens voor betere zoekresultaten
+  const cleanSlug = slug.replace(/-/g, ' ').replace(/['"]/g, '').split(' ').slice(0, 4).join(' ');
+  const query = encodeURIComponent(cleanSlug);
   const searchUrls = {
     "bol.com":       `https://www.bol.com/nl/s/?searchtext=${query}`,
     "amazon.nl":     `https://www.amazon.nl/s?k=${query}`,
