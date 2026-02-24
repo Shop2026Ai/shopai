@@ -47,7 +47,15 @@ function generateAffiliateLink(shop, slug) {
 // ── Images ───────────────────────────────────────────────────────────────────
 // Specifieke productfoto's op basis van trefwoorden in productnaam
 const PRODUCT_IMGS = {
+  "televisie":     "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
   "smart tv":      "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  "qled":          "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  "bravia":        "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  "ambilight":     "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  "qe55":          "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  "oled55":        "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80",
+  "pus":           "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
+  " tv":           "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
   "televisie":     "https://images.unsplash.com/photo-1593359677879-a4bb92f4834a?w=400&q=80",
   "oled":          "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80",
   "airpods":       "https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=400&q=80",
@@ -129,7 +137,7 @@ async function fetchProducts(query) {
     `Je bent een Nederlandse shopping-assistent voor ShopAI.
 Gebruiker zoekt: "${query}"
 Geef exact 5 productaanbevelingen als JSON array. Geen Temu, AliExpress of Alibaba.
-Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "description"(1 zin waarom goed).
+Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: televisie/audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "description"(1 zin waarom goed).
 Alleen de JSON array, direct beginnen met [`
   );
   return data.map(p => ({ ...p, image: getImg(p.name, p.imageCategory || p.category) }));
