@@ -142,8 +142,45 @@ const CAT_PHOTOS = {
 };
 
 // Gebruik product id (1-5) als index zodat elk product een andere foto krijgt
+// imageSearch bevat specifieke zoekterm van AI voor betere foto match
 function getImg(name, cat, id) {
   const idx = Math.max(0, (parseInt(id) || 1) - 1) % 5;
+  const nameLower = (name || "").toLowerCase();
+  
+  // Specifieke product matches op naam/zoekterm
+  const specific = [
+    { k: "playstation 5", c: "gaming", i: 0 },
+    { k: "ps5", c: "gaming", i: 0 },
+    { k: "xbox series x", c: "gaming", i: 1 },
+    { k: "xbox series s", c: "gaming", i: 1 },
+    { k: "nintendo switch", c: "gaming", i: 2 },
+    { k: "airpods pro", c: "audio", i: 0 },
+    { k: "airpods", c: "audio", i: 1 },
+    { k: "iphone 15", c: "telefoon", i: 0 },
+    { k: "iphone 14", c: "telefoon", i: 1 },
+    { k: "samsung galaxy s", c: "telefoon", i: 2 },
+    { k: "macbook pro", c: "laptop", i: 0 },
+    { k: "macbook air", c: "laptop", i: 1 },
+    { k: "ipad pro", c: "tablet", i: 0 },
+    { k: "ipad air", c: "tablet", i: 1 },
+    { k: "dyson v15", c: "keuken", i: 0 },
+    { k: "dyson v12", c: "keuken", i: 1 },
+    { k: "apple watch ultra", c: "horloge", i: 0 },
+    { k: "apple watch series", c: "horloge", i: 1 },
+    { k: "samsung qled", c: "televisie", i: 0 },
+    { k: "lg oled", c: "televisie", i: 1 },
+    { k: "sony bravia", c: "televisie", i: 2 },
+    { k: "philips ambilight", c: "televisie", i: 3 },
+  ];
+  
+  for (const s of specific) {
+    if (nameLower.includes(s.k)) {
+      const photos = CAT_PHOTOS[s.c] || CAT_PHOTOS["default"];
+      return photos[s.i];
+    }
+  }
+  
+  // Fallback op categorie + id index
   const catKey = (cat || "default").toLowerCase().trim();
   const photos = CAT_PHOTOS[catKey] || CAT_PHOTOS["default"];
   return photos[idx];
@@ -174,10 +211,10 @@ Geef exact 5 productaanbevelingen als JSON array.
 STRIKTE REGEL: Elk product MOET het exacte merk en type bevatten van "${query}". Als de gebruiker zoekt op "PlayStation 5" dan mogen ALLEEN PlayStation 5 producten worden getoond — geen Xbox, geen Nintendo, geen speakers, geen camera's, geen controllers tenzij expliciet gezocht. Alleen varianten zoals Slim, Digital Edition, bundels of officiële Sony PS5 accessoires.
 Als de gebruiker zoekt op "Nike Air Max" dan alleen Nike Air Max modellen. Geen Adidas, geen andere Nike schoenen.
 Geen Temu, AliExpress of Alibaba.
-Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: televisie/audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "description"(1 zin waarom goed).
+Elk object: "id"(1-5), "name"(echte merknaam+model), "category"(kort label), "emoji"(1 emoji), "priceRange"("€X – €Y"), "imageCategory"(één woord uit: televisie/audio/laptop/telefoon/camera/tablet/gaming/horloge/kleding/schoenen/keuken/fitness/default), "imageSearch"(2-3 Engelse woorden voor productfoto, bijv. "PlayStation 5 console" of "Nike Air Max white"), "description"(1 zin waarom goed).
 Alleen de JSON array, direct beginnen met [`
   );
-  return data.map(p => ({ ...p, image: getImg(p.name, p.imageCategory || p.category, p.id) }));
+  return data.map(p => ({ ...p, image: getImg(p.imageSearch || p.name, p.imageCategory || p.category, p.id) }));
 }
 
 async function fetchOffers(product) {
