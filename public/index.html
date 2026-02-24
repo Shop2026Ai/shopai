@@ -15,7 +15,6 @@
     const { useState, useEffect, useRef } = React;
 
 
-
 // ── Affiliate DB ─────────────────────────────────────────────────────────────
 // Echte winkel URLs - affiliate links worden later toegevoegd
 const affiliateDB = {
@@ -37,7 +36,7 @@ function generateAffiliateLink(shop, slug) {
     "coolblue.nl":   `https://www.coolblue.nl/zoeken?query=${query}`,
     "mediamarkt.nl": `https://www.mediamarkt.nl/nl/search.html?query=${query}`,
     "nedgame.nl":    `https://www.nedgame.nl/zoeken/?searchstring=${query}`,
-    "alternate.nl":  `https://www.alternate.nl/list.xhtml?q=${query}`,
+    "alternate.nl":  `https://www.alternate.nl/search?q=${query}`,
     "wehkamp.nl":    `https://www.wehkamp.nl/zoeken/?q=${query}`,
     "zalando.nl":    `https://www.zalando.nl/catalogus/?q=${query}`,
   };
@@ -837,7 +836,6 @@ function ShopAI() {
     </div>
   );
 }
-
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(React.createElement(ShopAI));
