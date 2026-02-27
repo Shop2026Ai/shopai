@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CadeauAI – Het perfecte cadeau, met de beste prijs</title>
+  <meta name="description" content="AI vindt het perfecte cadeau en vergelijkt de prijs bij alle grote webshops. Gratis, geen account nodig." />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+
+
+const OCCASIONS = [
+  { id: "verjaardag", label: "🎂 Verjaardag" },
+  { id: "kerst", label: "🎄 Kerst" },
+  { id: "sinterklaas", label: "🎅 Sinterklaas" },
+  { id: "valentijn", label: "💝 Valentijn" },
+  { id: "moederdag", label: "💐 Moederdag" },
+  { id: "vaderdag", label: "👔 Vaderdag" },
+  { id: "afstuderen", label: "🎓 Afstuderen" },
+  { id: "bruiloft", label: "💒 Bruiloft" },
+  { id: "zomaar", label: "✨ Zomaar" },
+];
+
+const RELATIONS = [
+  { id: "partner", label: "💑 Partner" },
+  { id: "moeder", label: "👩 Moeder" },
+  { id: "vader", label: "👨 Vader" },
+  { id: "vriend", label: "🤝 Vriend/Vriendin" },
+  { id: "kind", label: "🧒 Kind" },
+  { id: "collega", label: "💼 Collega" },
+  { id: "opa_oma", label: "👴 Opa/Oma" },
+  { id: "broer_zus", label: "👫 Broer/Zus" },
+];
+
+const INTERESTS = [
+  { id: "tech", label: "💻 Tech & Gadgets" },
+  { id: "sport", label: "⚽ Sport & Fitness" },
+  { id: "koken", label: "🍳 Koken & Eten" },
+  { id: "muziek", label: "🎵 Muziek" },
+  { id: "gaming", label: "🎮 Gaming" },
+  { id: "mode", label: "👗 Mode & Beauty" },
+  { id: "reizen", label: "✈️ Reizen" },
+  { id: "boeken", label: "📚 Boeken & Film" },
+  { id: "natuur", label: "🌿 Natuur & Dieren" },
+  { id: "kunst", label: "🎨 Kunst & Creatief" },
+];
+
+const BUDGETS = [
+  { id: "15", label: "Tot €15", sub: "Klein maar lief" },
+  { id: "30", label: "€15 – €30", sub: "Leuk cadeau" },
+  { id: "75", label: "€30 – €75", sub: "Mooi gebaar" },
+  { id: "150", label: "€75 – €150", sub: "Bijzonder cadeau" },
+  { id: "999", label: "€150+", sub: "Geen limiet" },
+];
+
+const SHOPS = ["bol.com", "coolblue.nl", "amazon.nl", "mediamarkt.nl", "zalando.nl", "wehkamp.nl"];
+
+async function callClaude(prompt, max_tokens = 1000) {
+  const res = await fetch("/api/claude", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, max_tokens }),
+  });
+  const data = await res.json();
+  const text = data.content?.map(b => b.text || "").join("") || "";
+  const clean = text.replace(/```json|```/g, "").trim();
+  const start = clean.indexOf("[");
+  const end = clean.lastIndexOf("]") + 1;
+  return JSON.parse(clean.slice(start, end));
+}
+
+async function fetchGifts(occasion, relation, age, interests, budget) {
+  return callClaude(`Je bent een Nederlandse cadeauadviseur.
+Gelegenheid: ${occasion}, Voor: ${relation}${age ? ` van ${age} jaar` : ""}, Interesses: ${interests.join(", ")}, Budget: max €${budget}
+Geef exact 5 cadeau-ideeën als JSON array. Elk cadeau is een echt, koopbaar product.
+Elk object: "id"(1-5), "name"(productnaam), "brand"(merk), "price"(realistisch getal in euro binnen budget), "emoji"(1 emoji), "why"(1 zin waarom perfect voor deze persoon), "searchQuery"(2-3 woorden voor zoeken in webshop)
+Alleen JSON array, direct beginnen met [`);
+}
+
+async function fetchPrices(gift) {
+  return callClaude(`Je bent een Nederlandse shopping-assistent.
+Product: "${gift.name}" van ${gift.brand}, geschatte prijs €${gift.price}
+Geef realistische prijzen bij 5 Nederlandse webshops als JSON array.
+Kies uit: bol.com, coolblue.nl, amazon.nl, mediamarkt.nl, zalando.nl, wehkamp.nl, alternate.nl
+Elk object: "shop"(domein), "price"(geheel getal euro), "delivery"(levertijd), "badge"(korte tekst of null)
+Varieer de prijzen realistisch (±15%). Sorteer laag→hoog. Alleen JSON array, direct met [`);
+}
+
+function generateShopUrl(shop, query) {
+  const q = encodeURIComponent(query);
+  const urls = {
+    "bol.com": `https://www.bol.com/nl/s/?searchtext=${q}`,
+    "coolblue.nl": `https://www.coolblue.nl/zoeken?query=${q}`,
+    "amazon.nl": `https://www.amazon.nl/s?k=${q}`,
+    "mediamarkt.nl": `https://www.mediamarkt.nl/nl/search.html?query=${q}`,
+    "zalando.nl": `https://www.zalando.nl/catalogus/?q=${q}`,
+    "wehkamp.nl": `https://www.wehkamp.nl/zoeken/?term=${q}`,
+    "alternate.nl": `https://www.alternate.nl/listing.xhtml?q=${q}`,
+  };
+  return urls[shop] || `https://${shop}`;
+}
+
+function CadeauAI() {
+  const [step, setStep] = useState(0);
+  const [occasion, setOccasion] = useState("");
+  const [relation, setRelation] = useState("");
+  const [age, setAge] = useState("");
+  const [interests, setInterests] = useState([]);
+  const [budget, setBudget] = useState("");
+  const [gifts, setGifts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [prices, setPrices] = useState([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [error, setError] = useState("");
+  const [wishlist, setWishlist] = useState([]);
+  const [showWishlist, setShowWishlist] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [surpriseLoading, setSurpriseLoading] = useState(false);
+  const [wrappingTip, setWrappingTip] = useState("");
+  const [loadingTip, setLoadingTip] = useState(false);
+
+  const addToWishlist = (gift) => {
+    setWishlist(prev => {
+      if (prev.find(g => g.id === gift.id && g.name === gift.name)) return prev;
+      return [...prev, { ...gift, addedAt: new Date().toLocaleDateString("nl-NL") }];
+    });
+  };
+
+  const removeFromWishlist = (gift) => {
+    setWishlist(prev => prev.filter(g => !(g.id === gift.id && g.name === gift.name)));
+  };
+
+  const isInWishlist = (gift) => {
+    return wishlist.some(g => g.id === gift.id && g.name === gift.name);
+  };
+
+  const copyWishlist = () => {
+    const text = wishlist.map((g, i) => `${i+1}. ${g.emoji} ${g.name} (${g.brand}) — ca. €${g.price}`).join("\n");
+    const full = `Mijn verlanglijstje via CadeauAI 🎁\n\n${text}\n\nBekijk prijzen op: https://cadeauai.nl`;
+    navigator.clipboard.writeText(full).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const toggleInterest = (id) => {
+    setInterests(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : prev.length < 3 ? [...prev, id] : prev
+    );
+  };
+
+  const handleSurprise = async () => {
+    setSurpriseLoading(true);
+    setError("");
+    // Pick random occasion, relation, age, interests, budget
+    const randOccasion = OCCASIONS[Math.floor(Math.random() * OCCASIONS.length)].id;
+    const randRelation = RELATIONS[Math.floor(Math.random() * RELATIONS.length)].id;
+    const randInterests = INTERESTS.sort(() => 0.5 - Math.random()).slice(0, 2).map(i => i.id);
+    const randBudget = BUDGETS[Math.floor(Math.random() * BUDGETS.length)].id;
+    setOccasion(randOccasion);
+    setRelation(randRelation);
+    setInterests(randInterests);
+    setBudget(randBudget);
+    try {
+      const result = await fetchGifts(randOccasion, randRelation, "", randInterests, randBudget);
+      setGifts(result);
+      setStep(4);
+    } catch (e) {
+      setError("Verbinding mislukt. Controleer je API credits.");
+    }
+    setSurpriseLoading(false);
+  };
+
+  const handleSearch = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await fetchGifts(occasion, relation, age, interests, budget);
+      setGifts(result);
+      setStep(4);
+    } catch (e) {
+      setError("Verbinding mislukt. Controleer je API credits.");
+    }
+    setLoading(false);
+  };
+
+  const handleWrappingTip = async (gift) => {
+    setLoadingTip(true);
+    setWrappingTip("");
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `Geef 3 korte, creatieve tips om een ${gift.name} extra speciaal te maken als cadeau. Denk aan verpakking, persoonlijk tintje, of een surprise element. Schrijf in het Nederlands, informeel en warm. Max 3 bullets van 1 zin elk. Geen intro of outro.`,
+          max_tokens: 300,
+        }),
+      });
+      const data = await res.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      setWrappingTip(text);
+    } catch (e) {
+      setWrappingTip("Kon tips niet ophalen.");
+    }
+    setLoadingTip(false);
+  };
+
+  const handleSelectGift = async (gift) => {
+    setSelected(gift);
+    setLoadingPrices(true);
+    setPrices([]);
+    setStep(5);
+    try {
+      const result = await fetchPrices(gift);
+      setPrices(result);
+    } catch (e) {
+      setError("Kon prijzen niet ophalen.");
+    }
+    setLoadingPrices(false);
+  };
+
+  const stepNum = step === 25 ? 2.5 : step;
+  const progress = Math.min((stepNum / 4) * 100, 100);
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #fdf6ec 0%, #fce8d5 50%, #f9d5c0 100%)",
+      fontFamily: "'Georgia', 'Palatino', serif",
+      padding: "0",
+    }}>
+      {/* Decorative background */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        background: `radial-gradient(circle at 20% 20%, rgba(255,182,139,0.3) 0%, transparent 50%),
+                     radial-gradient(circle at 80% 80%, rgba(255,154,108,0.2) 0%, transparent 50%)`,
+      }} />
+
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto", padding: "40px 20px 80px" }}>
+
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🎁</div>
+          <h1 style={{
+            fontSize: 36, fontWeight: "bold", margin: 0,
+            background: "linear-gradient(135deg, #c0392b, #e67e22)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            letterSpacing: "-1px",
+          }}>CadeauAI</h1>
+          <p style={{ color: "#9b6b4e", fontSize: 16, margin: "8px 0 0", fontStyle: "italic" }}>
+            Het perfecte cadeau, met de beste prijs
+          </p>
+        </div>
+
+        {/* Progress bar */}
+        {step > 0 && step < 5 && (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ height: 4, background: "#f0d5c0", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 99,
+                background: "linear-gradient(90deg, #e74c3c, #e67e22)",
+                width: `${progress}%`,
+                transition: "width 0.4s ease",
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+              {["Gelegenheid", "Voor wie", "Leeftijd", "Interesses"].map((s, i) => (
+                <span key={i} style={{
+                  fontSize: 11, color: step > i ? "#e67e22" : "#c4a882",
+                  fontWeight: step > i ? "bold" : "normal",
+                }}>{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Wishlist floating button */}
+        {wishlist.length > 0 && !showWishlist && (
+          <div
+            onClick={() => setShowWishlist(true)}
+            style={{
+              position: "fixed", bottom: 24, right: 24, zIndex: 100,
+              background: "linear-gradient(135deg, #e74c3c, #e67e22)",
+              color: "white", borderRadius: 99, padding: "12px 20px",
+              cursor: "pointer", boxShadow: "0 4px 20px rgba(230,126,34,0.5)",
+              display: "flex", alignItems: "center", gap: 8, fontWeight: "bold",
+              fontSize: 14, fontFamily: "inherit",
+            }}>
+            🎁 Verlanglijstje ({wishlist.length})
+          </div>
+        )}
+
+        {/* Wishlist overlay */}
+        {showWishlist && (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 200,
+            background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end",
+          }}
+            onClick={() => setShowWishlist(false)}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: "100%", maxWidth: 600, margin: "0 auto",
+                background: "white", borderRadius: "24px 24px 0 0",
+                padding: 24, maxHeight: "80vh", overflowY: "auto",
+              }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h2 style={{ color: "#c0392b", margin: 0, fontSize: 20 }}>🎁 Mijn verlanglijstje</h2>
+                <button onClick={() => setShowWishlist(false)}
+                  style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#c4a882" }}>✕</button>
+              </div>
+
+              {wishlist.length === 0 ? (
+                <p style={{ color: "#c4a882", textAlign: "center", padding: "32px 0" }}>
+                  Nog geen cadeaus bewaard
+                </p>
+              ) : (
+                <>
+                  {wishlist.map((gift, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "12px 0", borderBottom: "1px solid #f0d5c0",
+                    }}>
+                      <span style={{ fontSize: 28 }}>{gift.emoji}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: "bold", color: "#5a3520", fontSize: 14 }}>{gift.name}</div>
+                        <div style={{ fontSize: 12, color: "#9b6b4e" }}>{gift.brand} · ca. €{gift.price}</div>
+                        <div style={{ fontSize: 11, color: "#c4a882" }}>Toegevoegd {gift.addedAt}</div>
+                      </div>
+                      <button
+                        onClick={() => removeFromWishlist(gift)}
+                        style={{ background: "none", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: 18 }}>
+                        🗑
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={copyWishlist}
+                    style={{
+                      width: "100%", marginTop: 20, padding: "14px",
+                      borderRadius: 12, border: "none",
+                      background: copied ? "#27ae60" : "linear-gradient(135deg, #e74c3c, #e67e22)",
+                      color: "white", fontWeight: "bold", fontSize: 15,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}>
+                    {copied ? "✓ Gekopieerd!" : "📋 Kopieer verlanglijstje"}
+                  </button>
+                  <p style={{ textAlign: "center", fontSize: 12, color: "#c4a882", marginTop: 8 }}>
+                    Plak de tekst in WhatsApp of een berichtje
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 0 — Welkom */}
+        {step === 0 && (
+          <Card>
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <p style={{ fontSize: 18, color: "#7a4f35", lineHeight: 1.6, marginBottom: 32 }}>
+                Geen idee wat je moet geven? 🤔<br />
+                Onze AI vindt in 30 seconden het <strong>perfecte cadeau</strong> — en vergelijkt direct de prijs bij alle grote webshops.
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 32 }}>
+                {["✅ Gratis", "✅ Geen account", "✅ Beste prijs"].map(t => (
+                  <span key={t} style={{
+                    background: "rgba(230,126,34,0.15)", color: "#c0392b",
+                    padding: "6px 14px", borderRadius: 99, fontSize: 13, fontWeight: "bold",
+                  }}>{t}</span>
+                ))}
+              </div>
+              <BigButton onClick={() => setStep(1)}>Vind het perfecte cadeau →</BigButton>
+              <div style={{ marginTop: 12 }}>
+                <button onClick={handleSurprise} disabled={surpriseLoading}
+                  style={{
+                    background: "none", border: "2px solid #f0d5c0", borderRadius: 12,
+                    padding: "12px 24px", color: "#e67e22", fontWeight: "bold",
+                    cursor: surpriseLoading ? "not-allowed" : "pointer",
+                    fontSize: 15, fontFamily: "inherit", width: "100%",
+                    opacity: surpriseLoading ? 0.6 : 1,
+                  }}>
+                  {surpriseLoading ? "AI kiest voor jou... 🎲" : "🎲 Verras me! (1 klik)"}
+                </button>
+                <p style={{ fontSize: 11, color: "#c4a882", margin: "6px 0 0" }}>
+                  AI kiest alles zelf — gewoon kijken wat eruit komt!
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP 1 — Gelegenheid */}
+        {step === 1 && (
+          <Card title="Voor welke gelegenheid?" subtitle="Kies één optie">
+            <Grid>
+              {OCCASIONS.map(o => (
+                <Chip
+                  key={o.id}
+                  label={o.label}
+                  selected={occasion === o.id}
+                  onClick={() => { setOccasion(o.id); setStep(2); }}
+                />
+              ))}
+            </Grid>
+          </Card>
+        )}
+
+        {/* STEP 2 — Voor wie */}
+        {step === 2 && (
+          <Card title="Voor wie is het cadeau?" subtitle="Kies één optie">
+            <Grid>
+              {RELATIONS.map(r => (
+                <Chip
+                  key={r.id}
+                  label={r.label}
+                  selected={relation === r.id}
+                  onClick={() => { setRelation(r.id); setStep(25); }}
+                />
+              ))}
+            </Grid>
+            <BackButton onClick={() => setStep(1)} />
+          </Card>
+        )}
+
+        {/* STEP 2.5 — Leeftijd */}
+        {step === 25 && (
+          <Card title="Hoe oud is de ontvanger?" subtitle="Optioneel — sla over als je het niet weet">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+              {[
+                { id: "5", label: "👶 0 – 5 jaar" },
+                { id: "12", label: "🧒 6 – 12 jaar" },
+                { id: "17", label: "🧑 13 – 17 jaar" },
+                { id: "25", label: "🙋 18 – 25 jaar" },
+                { id: "40", label: "👤 26 – 40 jaar" },
+                { id: "55", label: "🧔 41 – 55 jaar" },
+                { id: "70", label: "👴 56 – 70 jaar" },
+                { id: "80", label: "👴 70+ jaar" },
+              ].map(a => (
+                <Chip key={a.id} label={a.label} selected={age === a.id}
+                  onClick={() => { setAge(a.id); setStep(3); }} />
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <BackButton onClick={() => setStep(2)} />
+              <BigButton onClick={() => { setAge(""); setStep(3); }}>
+                Leeftijd overslaan →
+              </BigButton>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP 3 — Interesses + Budget */}
+        {step === 3 && (
+          <Card title="Interesses & budget" subtitle="Kies max 3 interesses en een budget">
+            <p style={{ fontSize: 13, color: "#9b6b4e", marginBottom: 12 }}>
+              Interesses ({interests.length}/3):
+            </p>
+            <Grid>
+              {INTERESTS.map(i => (
+                <Chip
+                  key={i.id}
+                  label={i.label}
+                  selected={interests.includes(i.id)}
+                  onClick={() => toggleInterest(i.id)}
+                  disabled={!interests.includes(i.id) && interests.length >= 3}
+                />
+              ))}
+            </Grid>
+
+            <p style={{ fontSize: 13, color: "#9b6b4e", margin: "20px 0 12px" }}>Budget:</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {BUDGETS.map(b => (
+                <div key={b.id}
+                  onClick={() => setBudget(b.id)}
+                  style={{
+                    padding: "12px 16px",
+                    borderRadius: 12,
+                    border: `2px solid ${budget === b.id ? "#e67e22" : "#f0d5c0"}`,
+                    background: budget === b.id ? "rgba(230,126,34,0.1)" : "white",
+                    cursor: "pointer",
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    transition: "all 0.2s",
+                  }}>
+                  <span style={{ fontWeight: "bold", color: "#7a4f35" }}>{b.label}</span>
+                  <span style={{ fontSize: 12, color: "#c4a882" }}>{b.sub}</span>
+                </div>
+              ))}
+            </div>
+
+            {error && <p style={{ color: "#e74c3c", fontSize: 13, marginTop: 12 }}>{error}</p>}
+
+            <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+              <BackButton onClick={() => setStep(25)} />
+              <BigButton
+                onClick={handleSearch}
+                disabled={interests.length === 0 || !budget || loading}
+              >
+                {loading ? "AI zoekt cadeaus... 🔍" : "Zoek cadeaus →"}
+              </BigButton>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP 4 — Cadeau resultaten */}
+        {step === 4 && (
+          <div>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <h2 style={{ color: "#c0392b", fontSize: 22, margin: 0 }}>🎁 Jouw cadeau-ideeën</h2>
+              <p style={{ color: "#9b6b4e", fontSize: 14, margin: "6px 0 0" }}>
+                Klik op een cadeau voor de beste prijs
+              </p>
+            </div>
+            {gifts.map((gift, i) => (
+              <div key={gift.id}
+                onClick={() => handleSelectGift(gift)}
+                style={{
+                  background: "white",
+                  borderRadius: 16,
+                  padding: "18px 20px",
+                  marginBottom: 12,
+                  cursor: "pointer",
+                  border: "2px solid transparent",
+                  boxShadow: "0 2px 12px rgba(192,57,43,0.08)",
+                  transition: "all 0.2s",
+                  display: "flex", alignItems: "center", gap: 16,
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "#e67e22"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"}
+              >
+                <div style={{
+                  width: 52, height: 52, borderRadius: 12,
+                  background: "linear-gradient(135deg, #fce8d5, #f9d5c0)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 28, flexShrink: 0,
+                }}>{gift.emoji}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: "bold", color: "#5a3520", fontSize: 15 }}>{gift.name}</div>
+                  <div style={{ fontSize: 12, color: "#9b6b4e", margin: "2px 0" }}>{gift.brand}</div>
+                  <div style={{ fontSize: 13, color: "#7a8c6e", fontStyle: "italic" }}>{gift.why}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <div style={{ color: "#e67e22", fontWeight: "bold", fontSize: 18 }}>€{gift.price}</div>
+                  <div style={{ fontSize: 11, color: "#c4a882" }}>vergelijk →</div>
+                  <button
+                    onClick={e => { e.stopPropagation(); addToWishlist(gift); }}
+                    style={{
+                      background: isInWishlist(gift) ? "#27ae60" : "rgba(230,126,34,0.15)",
+                      border: "none", borderRadius: 99, padding: "4px 10px",
+                      fontSize: 11, cursor: "pointer", color: isInWishlist(gift) ? "white" : "#e67e22",
+                      fontWeight: "bold", fontFamily: "inherit",
+                    }}>
+                    {isInWishlist(gift) ? "✓ Bewaard" : "+ Bewaar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div style={{ textAlign: "center", marginTop: 16 }}>
+              <button onClick={() => { setStep(1); setGifts([]); setOccasion(""); setRelation(""); setAge(""); setInterests([]); setBudget(""); }}
+                style={{ background: "none", border: "none", color: "#c4a882", cursor: "pointer", fontSize: 13 }}>
+                ↩ Opnieuw zoeken
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5 — Prijsvergelijking */}
+        {step === 5 && selected && (
+          <div>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>{selected.emoji}</div>
+              <h2 style={{ color: "#c0392b", fontSize: 20, margin: 0 }}>{selected.name}</h2>
+              <p style={{ color: "#9b6b4e", fontSize: 13, margin: "4px 0 0" }}>{selected.brand}</p>
+            </div>
+
+            <Card title="💰 Prijsvergelijking" subtitle="Gesorteerd van laag naar hoog">
+              {loadingPrices ? (
+                <div style={{ textAlign: "center", padding: "32px 0", color: "#c4a882" }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+                  Prijzen ophalen bij alle winkels...
+                </div>
+              ) : (
+                prices.map((p, i) => (
+                  <a key={i}
+                    href={generateShopUrl(p.shop, selected.searchQuery || selected.name)}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "14px 16px", marginBottom: 8, borderRadius: 12,
+                      background: i === 0 ? "linear-gradient(135deg, #fef9f0, #fce8d5)" : "white",
+                      border: `2px solid ${i === 0 ? "#e67e22" : "#f0d5c0"}`,
+                      transition: "all 0.2s",
+                    }}>
+                      {i === 0 && (
+                        <span style={{
+                          background: "#e67e22", color: "white",
+                          fontSize: 10, fontWeight: "bold", padding: "2px 8px", borderRadius: 99,
+                          flexShrink: 0,
+                        }}>BESTE PRIJS</span>
+                      )}
+                      <span style={{ flex: 1, color: "#5a3520", fontWeight: "bold", fontSize: 14 }}>
+                        {p.shop}
+                      </span>
+                      {p.badge && (
+                        <span style={{ fontSize: 11, color: "#9b6b4e", background: "#f0d5c0", padding: "2px 8px", borderRadius: 99 }}>
+                          {p.badge}
+                        </span>
+                      )}
+                      <span style={{ color: "#e67e22", fontWeight: "bold", fontSize: 18 }}>€{p.price}</span>
+                      <span style={{ color: "#c4a882", fontSize: 18 }}>→</span>
+                    </div>
+                  </a>
+                ))
+              )}
+            </Card>
+
+            {/* Wrapping tips */}
+            <Card title="🎀 Maak het extra speciaal" subtitle="Tips voor de perfecte presentatie">
+              {wrappingTip ? (
+                <div style={{ color: "#5a3520", fontSize: 14, lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                  {wrappingTip}
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleWrappingTip(selected)}
+                  disabled={loadingTip}
+                  style={{
+                    width: "100%", padding: "12px", borderRadius: 12,
+                    border: "2px solid #f0d5c0", background: "white",
+                    color: loadingTip ? "#c4a882" : "#e67e22",
+                    fontWeight: "bold", cursor: loadingTip ? "not-allowed" : "pointer",
+                    fontSize: 14, fontFamily: "inherit",
+                  }}>
+                  {loadingTip ? "Tips ophalen... ✨" : "✨ Geef me cadeautips"}
+                </button>
+              )}
+            </Card>
+
+            <div style={{ textAlign: "center", marginTop: 16, display: "flex", gap: 10, justifyContent: "center" }}>
+              <button onClick={() => { setStep(4); setSelected(null); setPrices([]); setWrappingTip(""); }}
+                style={{ background: "none", border: "none", color: "#c4a882", cursor: "pointer", fontSize: 13 }}>
+                ← Andere cadeaus
+              </button>
+              <button onClick={() => { setStep(1); setGifts([]); setSelected(null); setPrices([]); setWrappingTip(""); setOccasion(""); setRelation(""); setAge(""); setInterests([]); setBudget(""); }}
+                style={{ background: "none", border: "none", color: "#c4a882", cursor: "pointer", fontSize: 13 }}>
+                ↩ Opnieuw
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ textAlign: "center", marginTop: 48, color: "#c4a882", fontSize: 12 }}>
+          Powered by <a href="https://shop-ai.nl" style={{ color: "#e67e22" }}>ShopAI</a> · Gratis · Geen account nodig
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper components
+function Card({ children, title, subtitle }) {
+  return (
+    <div style={{
+      background: "white",
+      borderRadius: 20,
+      padding: 24,
+      boxShadow: "0 4px 24px rgba(192,57,43,0.08)",
+      marginBottom: 16,
+    }}>
+      {title && <h2 style={{ color: "#c0392b", fontSize: 20, margin: "0 0 4px" }}>{title}</h2>}
+      {subtitle && <p style={{ color: "#c4a882", fontSize: 13, margin: "0 0 20px" }}>{subtitle}</p>}
+      {children}
+    </div>
+  );
+}
+
+function Grid({ children }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ label, selected, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        padding: "8px 14px", borderRadius: 99, border: "2px solid",
+        borderColor: selected ? "#e67e22" : "#f0d5c0",
+        background: selected ? "rgba(230,126,34,0.15)" : "white",
+        color: selected ? "#c0392b" : "#9b6b4e",
+        fontWeight: selected ? "bold" : "normal",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        fontSize: 13, transition: "all 0.15s",
+        fontFamily: "inherit",
+      }}>
+      {label}
+    </button>
+  );
+}
+
+function BigButton({ children, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        flex: 1, padding: "14px 24px", borderRadius: 12, border: "none",
+        background: disabled ? "#f0d5c0" : "linear-gradient(135deg, #e74c3c, #e67e22)",
+        color: "white", fontWeight: "bold", fontSize: 16, cursor: disabled ? "not-allowed" : "pointer",
+        boxShadow: disabled ? "none" : "0 4px 16px rgba(230,126,34,0.4)",
+        transition: "all 0.2s", fontFamily: "inherit",
+      }}>
+      {children}
+    </button>
+  );
+}
+
+function BackButton({ onClick }) {
+  return (
+    <button onClick={onClick}
+      style={{
+        padding: "14px 20px", borderRadius: 12, border: "2px solid #f0d5c0",
+        background: "white", color: "#c4a882", cursor: "pointer", fontSize: 14,
+        fontFamily: "inherit",
+      }}>
+      ←
+    </button>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(CadeauAI));
+  </script>
+</body>
+</html>
