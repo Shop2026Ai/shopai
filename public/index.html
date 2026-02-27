@@ -19,7 +19,7 @@
 // Echte winkel URLs - affiliate links worden later toegevoegd
 const affiliateDB = {
   "bol.com":       { base: "https://www.bol.com/nl/s/",      id: "", commission: "7%" },
-  "amazon.nl":     { base: "https://www.amazon.nl/s",        id: "", commission: "5%" },
+  "amazon.nl":     { base: "https://www.amazon.nl/s",        id: "shop2026ai-21", commission: "5%" },
   "coolblue.nl":   { base: "https://www.coolblue.nl/zoeken", id: "", commission: "4%" },
   "mediamarkt.nl": { base: "https://www.mediamarkt.nl/nl/search.html", id: "", commission: "3%" },
   "nedgame.nl":    { base: "https://www.nedgame.nl/zoeken",  id: "", commission: "6%" },
@@ -34,7 +34,7 @@ function generateAffiliateLink(shop, slug) {
   const query = encodeURIComponent(cleanSlug);
   const searchUrls = {
     "bol.com":       `https://www.bol.com/nl/s/?searchtext=${query}`,
-    "amazon.nl":     `https://www.amazon.nl/s?k=${query}`,
+    "amazon.nl":     `https://www.amazon.nl/s?k=${query}&tag=shop2026ai-21`,
     "coolblue.nl":   `https://www.coolblue.nl/zoeken?query=${query}`,
     "mediamarkt.nl": `https://www.mediamarkt.nl/nl/search.html?query=${query}`,
     "nedgame.nl":    `https://www.nedgame.nl/zoeken/?searchstring=${query}`,
