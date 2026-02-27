@@ -224,6 +224,7 @@ Genereer aanbiedingen voor: "${product.name}" (${product.category})
 Geef exact 5 webshops als JSON array. Geen Temu, AliExpress of Alibaba.
 Kies uit: bol.com, coolblue.nl, amazon.nl, mediamarkt.nl, alternate.nl, wehkamp.nl, zalando.nl, nedgame.nl.
 Elk object: "shop"(domein), "price"(geheel getal in euro), "rating"(4.0-5.0), "delivery"(levertijd tekst), "badge"(korte tekst of null), "reason"(1 zin waarom kopen).
+BELANGRIJK: amazon.nl krijgt ALTIJD badge "⭐ Aanbevolen"
 Realistische én variërende prijzen voor "${product.name}". Sorteer laag→hoog. Alleen JSON array, direct met [`,
     800
   );
@@ -849,7 +850,7 @@ function ShopAI() {
                         <div className="oc-shop">{o.shop}</div>
                         <div className="oc-meta">★ {o.rating} · {o.delivery}</div>
                         {o.reason && <div className="oc-reason">{o.reason}</div>}
-                        {o.badge && <div className="oc-badge">{o.badge}</div>}
+                        {o.badge && <div className="oc-badge" style={o.shop === "amazon.nl" ? {background: "#FF9900", color: "white", borderColor: "#FF9900"} : {}}>{o.badge}</div>}
                       </div>
                       <div className="oc-pc">
                         <div className="oc-price">€{o.price}</div>
