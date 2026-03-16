@@ -134,14 +134,6 @@ function CadeauAI() {
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [error, setError] = useState("");
   const [wishlist, setWishlist] = useState([]);
-  const [visitorCount, setVisitorCount] = useState(null);
-
-  useEffect(() => {
-    fetch("https://shopai-id6u.vercel.app/api/counter")
-      .then(r => r.json())
-      .then(d => setVisitorCount(d.count))
-      .catch(() => {});
-  }, []);
   const [showWishlist, setShowWishlist] = useState(false);
   const [copied, setCopied] = useState(false);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
@@ -687,11 +679,6 @@ function CadeauAI() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", marginTop: 48, color: "#c4a882", fontSize: 12 }}>
-          {visitorCount && (
-            <div style={{ marginBottom: 10, fontSize: 13, color: "#e67e22", fontWeight: 600 }}>
-              🎁 {visitorCount.toLocaleString("nl-NL")} mensen gingen je voor
-            </div>
-          )}
           Powered by <a href="https://shop-ai.nl" style={{ color: "#e67e22" }}>ShopAI</a> · Gratis · Geen account nodig
         </div>
       </div>
